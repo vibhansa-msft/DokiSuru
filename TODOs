@@ -16,6 +16,7 @@
 - Block-id format
     - block-index / offset (u16)
     - 32 byte MD5
+
 - Logic
     - Validate local path is a file or directory
     - Stage 1:  error out for directory
@@ -36,7 +37,30 @@
             - compare md5 against md5 retrevied from block list for that block
             - on mismatch upload/dowload that block 
             - if it was upload case, complete with new putBlockList()
-            
+
+
+
+- Algorithm
+    - If local and remote both does not exists, "stupid user"
+
+    - If remote file does not exists then upload entire file
+    - If metadata does not have the last etag, then error out
+    - Last ETAG from metadata does not match current ETAG then we can not rely on block-ids, error out
+        - force upload later with a flag in these error out cases
+
+    - If local file does not exists then download entire file
+   
+    - If local file exists then get LMT of local file
+        - If LMT and size matches no op
+    
+    - If both exists then stripe local file and compute md5 sum for each local block
+        - should be done in parallel for each block
+        - have a thread pool and channel to compute md5 of each block
+        - compare with existing block-list 
+            - this block does not exists in block-list
+            - this block exists and md5 does not match so upload/download
+    
+
 - Sample command
     - Configure all your storage creds in ENV Variables
         - Account name
