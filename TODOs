@@ -1,0 +1,45 @@
+- Go-SDK Integration
+    - Auth module (Key, SAS)
+
+- Logging
+    - Go logging
+
+- Command
+    - Go flags 
+
+- Assumptions / Later
+    - Only file support for first iteration
+    - Later add directory support
+    - Add flag later to force upload/download if the file is not following custom block id format
+    - Save last upload etag in the metadata of file and on every sync compare current etag in container with the last etag saved. If they do not match means someone has overwritten the file outside the scope of dokisuru.
+
+- Logic
+    - Validate local path is a file or directory
+    - Stage 1:  error out for directory
+    - check existance of same file in storage container
+
+    * if file does not exists on container then upload entire file
+    - if file exists on container then check LMT
+        * if file does not exists locally then download entire file
+        - if local LMT is higher then remote then upload sync
+        - if remote LMT is higher then local then download sync
+    - upload/download logic:
+        - Get remote block list
+        * if block list is not following custom block-id format
+            * fail the operation
+        - if block-id format is acceptable
+            - divide the local file into similar blocks
+            - compute md5 of each local block
+            - compare md5 against md5 retrevied from block list for that block
+            - on mismatch upload/dowload that block 
+            - if it was upload case, complete with new putBlockList()
+            
+- Sample command
+    - Configure all your storage creds in ENV Variables
+        - Account name
+        - key / sas
+        - Container
+        - Path
+    
+    - ./dokisuru <local path>
+        e.g. ./dokisuru ./README.md
