@@ -1,7 +1,7 @@
 - Go-SDK Integration
     - Auth module (Key, SAS)
 
-- Logging
+* Logging
     - Go logging
 
 - Command
@@ -13,7 +13,7 @@
     - Add flag later to force upload/download if the file is not following custom block id format
     - Save last upload etag in the metadata of file and on every sync compare current etag in container with the last etag saved. If they do not match means someone has overwritten the file outside the scope of dokisuru.
 
-- Block-id format
+* Block-id format
     - block-index / offset (u16)
     - 32 byte MD5
 
