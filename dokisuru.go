@@ -36,11 +36,11 @@ func main() {
 
 	localDataHandler.Start()
 
-	// Wait for the workerpool to finish
-	workerPool.Wait()
-
 	// Stop the worker pool
 	workerPool.Stop()
+
+	// Wait for the workerpool to finish
+	workerPool.Wait()
 
 	fmt.Println("DōkiSuru: Finishing")
 	log.Printf("DōkiSuru: Finishing")
