@@ -11,15 +11,14 @@ type WorkerPool struct {
 	WorkerCount int
 	JobQueue    chan *Job
 	WaitGroup   sync.WaitGroup
-	Handler     JobHandler
+	Callback    func(int, *Job) error
 }
 
 // Create a new worker pool
-func NewWorkerPool(workerCount int, handler JobHandler) *WorkerPool {
+func NewWorkerPool(workerCount int, callback func(int, *Job) error) *WorkerPool {
 	return &WorkerPool{
 		WorkerCount: workerCount,
 		JobQueue:    make(chan *Job, workerCount),
-		Handler:     handler,
 	}
 }
 
@@ -51,13 +50,13 @@ func (wp *WorkerPool) worker(workerId int) {
 	defer wp.WaitGroup.Done()
 
 	for job := range wp.JobQueue {
-		err := wp.Handler.Process(workerId, job)
+		err := wp.Callback(workerId, job)
 		if err != nil {
 			log.Println("Worker", workerId, "error processing job", job.BlockIndex, ":", err)
 		}
 
-		if wp.Handler.GetNext() != nil {
+		// if wp.Handler.GetNext() != nil {
 
-		}
+		// }
 	}
 }

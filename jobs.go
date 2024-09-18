@@ -19,7 +19,8 @@ type JobHandler interface {
 }
 
 type BaseHandler struct {
-	Next JobHandler
+	Next   JobHandler
+	Worker *WorkerPool
 }
 
 func (bh *BaseHandler) Process(workerId int, job *Job) error {

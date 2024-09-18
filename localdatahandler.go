@@ -11,10 +11,13 @@ type LocalDataHandler struct {
 	BaseHandler
 }
 
-func NewLocalDataHandler(next JobHandler) *LocalDataHandler {
-	return &LocalDataHandler{
-		BaseHandler: BaseHandler{Next: next},
+func NewLocalDataHandler(workerCount int, next JobHandler) *LocalDataHandler {
+	ldh := &LocalDataHandler{
+		BaseHandler: BaseHandler{
+			Next: next},
 	}
+	ldh.Worker = NewWorkerPool(workerCount, ldh.Process)
+	return ldh
 }
 
 // Process the block
@@ -57,7 +60,7 @@ func (ldh *LocalDataHandler) Process(workerId int, bj *Job) error {
 	return nil
 }
 
-func (ldh *LocalDataHandler) Start(schedule func(job *Job)) {
+func (ldh *LocalDataHandler) Start() {
 	info, err := os.Lstat(config.Path)
 	if err != nil {
 		log.Println("Error getting file info for", config.Path, ":", err)
@@ -91,6 +94,6 @@ func (ldh *LocalDataHandler) Start(schedule func(job *Job)) {
 			Offset: offset,
 		}
 
-		schedule(&job)
+		ldh.Worker.AddJob(&job)
 	}
 }
