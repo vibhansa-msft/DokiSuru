@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"sync"
 )
 
@@ -9,15 +8,17 @@ import (
 // This is used to process the blocks concurrently
 type WorkerPool struct {
 	WorkerCount int
-	JobQueue    chan Job
+	JobQueue    chan *Job
 	WaitGroup   sync.WaitGroup
+	Handler     JobHandler
 }
 
 // Create a new worker pool
-func NewWorkerPool(workerCount int) *WorkerPool {
+func NewWorkerPool(workerCount int, handler JobHandler) *WorkerPool {
 	return &WorkerPool{
 		WorkerCount: workerCount,
-		JobQueue:    make(chan Job, workerCount),
+		JobQueue:    make(chan *Job, workerCount),
+		Handler:     handler,
 	}
 }
 
@@ -40,20 +41,15 @@ func (wp *WorkerPool) Wait() {
 }
 
 // Add a job to the worker pool
-func (wp *WorkerPool) AddJob(job Job) {
+func (wp *WorkerPool) AddJob(job *Job) {
 	wp.JobQueue <- job
 }
 
 // Worker function which processes the job
 func (wp *WorkerPool) worker(workerId int) {
-	log.Println("Worker", workerId, "started")
 	defer wp.WaitGroup.Done()
 
 	for job := range wp.JobQueue {
-		job.Process(workerId)
-
-		// Push the job to next queue
+		wp.Handler.Process(workerId, job)
 	}
-
-	log.Println("Worker", workerId, "done")
 }

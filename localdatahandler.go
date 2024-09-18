@@ -1,30 +1,26 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
 )
 
 type LocalDataHandler struct {
-	WorkerPool *WorkerPool
 }
 
-func NewLocalDataHandler(wp *WorkerPool) *LocalDataHandler {
-	return &LocalDataHandler{
-		WorkerPool: wp,
-	}
+func NewLocalDataHandler() *LocalDataHandler {
+	return &LocalDataHandler{}
 }
 
 // Process the block
-func (bj *BlockJob) Process(workerId int) {
-	log.Println("Worker", workerId, "processing offset", bj.Offset)
-
+func (ldh *LocalDataHandler) Process(workerId int, bj *Job) error {
 	// Open the file
 	file, err := os.Open(bj.Path)
 	if err != nil {
 		log.Println("Worker", workerId, "error opening file", bj.Path, ":", err)
-		return
+		return fmt.Errorf("error opening file %s: %v", bj.Path, err)
 	}
 
 	defer file.Close()
@@ -38,12 +34,12 @@ func (bj *BlockJob) Process(workerId int) {
 	if err != nil {
 		if err != io.EOF {
 			log.Println("Worker", workerId, "error reading file", bj.Path, ":", err)
-			return
+			return fmt.Errorf("error reading file %s: %v", bj.Path, err)
 		}
 	}
 	if n <= 0 {
 		log.Println("Worker", workerId, "nothing to process from file", bj.Path, ":", err)
-		return
+		return fmt.Errorf("nothing to process from file %s: %v", bj.Path, err)
 	}
 
 	// Compuate md5sum of the data
@@ -54,9 +50,11 @@ func (bj *BlockJob) Process(workerId int) {
 
 	log.Println("Worker", workerId, "processed block", bj.BlockIndex, "with blockId", bj.BlockId)
 	log.Printf("%x\n", bj.Md5Sum)
+
+	return nil
 }
 
-func (ldh *LocalDataHandler) Start() {
+func (ldh *LocalDataHandler) Start(schedule func(job *Job)) {
 	info, err := os.Lstat(config.Path)
 	if err != nil {
 		log.Println("Error getting file info for", config.Path, ":", err)
@@ -85,11 +83,11 @@ func (ldh *LocalDataHandler) Start() {
 	// Create a job for each block
 	for i := uint32(0); i < blockCount; i++ {
 		offset := int64(i) * int64(config.BlockSize)
-		job := BlockJob{
+		job := Job{
 			Path:   config.Path,
 			Offset: offset,
 		}
 
-		ldh.WorkerPool.AddJob(&job)
+		schedule(&job)
 	}
 }
