@@ -29,16 +29,16 @@ func main() {
 	localDataHandler := NewLocalDataHandler()
 
 	// Start the worker pool
-	workerPool := NewWorkerPool(config.WorkerCount, localDataHandler)
-	workerPool.Start()
+	localWorkers := NewWorkerPool(config.WorkerCount, localDataHandler)
+	localWorkers.Start()
 
-	localDataHandler.Start(workerPool.AddJob)
+	localDataHandler.Start(localWorkers.AddJob)
 
 	// Stop the worker pool
-	workerPool.Stop()
+	localWorkers.Stop()
 
-	// Wait for the workerpool to finish
-	workerPool.Wait()
+	// Wait for the localWorkers to finish
+	localWorkers.Wait()
 
 	log.Printf("DōkiSuru: Finishing")
 }

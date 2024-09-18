@@ -8,10 +8,13 @@ import (
 )
 
 type LocalDataHandler struct {
+	BaseHandler
 }
 
-func NewLocalDataHandler() *LocalDataHandler {
-	return &LocalDataHandler{}
+func NewLocalDataHandler(next JobHandler) *LocalDataHandler {
+	return &LocalDataHandler{
+		BaseHandler: BaseHandler{Next: next},
+	}
 }
 
 // Process the block

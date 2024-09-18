@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"sync"
 )
 
@@ -50,6 +51,13 @@ func (wp *WorkerPool) worker(workerId int) {
 	defer wp.WaitGroup.Done()
 
 	for job := range wp.JobQueue {
-		wp.Handler.Process(workerId, job)
+		err := wp.Handler.Process(workerId, job)
+		if err != nil {
+			log.Println("Worker", workerId, "error processing job", job.BlockIndex, ":", err)
+		}
+
+		if wp.Handler.GetNext() != nil {
+
+		}
 	}
 }
