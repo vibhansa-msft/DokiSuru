@@ -1,4 +1,4 @@
-package main
+package storage
 
 import (
 	"fmt"
@@ -16,13 +16,43 @@ import (
 // AZURE_STORAGE_KEY
 // AZURE_STORAGE_SAS
 
-func getServiceClient(account string) (*service.Client, error) {
+type Clients struct {
+	svcClient *service.Client
+	cntClient *container.Client
+}
+
+func NewClients() (c *Clients, err error) {
+	c = &Clients{}
+	err = c.createServiceClient()
+	if err != nil {
+		return nil, err
+	}
+	err = c.createContainerClient()
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (c *Clients) GetContainerClient() *container.Client {
+	return c.cntClient
+}
+
+func (c *Clients) createServiceClient() error {
+	account := strings.TrimSpace(os.Getenv("AZURE_STORAGE_ACCOUNT_NAME"))
+	container := strings.TrimSpace(os.Getenv("AZURE_STORAGE_ACCOUNT_CONTAINER"))
+
+	if account == "" || container == "" {
+		log.Println("Storage account name or container not provided")
+		return fmt.Errorf("Storage account name or container not provided")
+	}
+
 	key := strings.TrimSpace(os.Getenv("AZURE_STORAGE_KEY"))
 	sas := strings.TrimSpace(os.Getenv("AZURE_STORAGE_SAS"))
 
 	if key == "" && sas == "" {
 		log.Println("Either access key or SAS is needed")
-		return nil, fmt.Errorf("Either access key or SAS is needed")
+		return fmt.Errorf("Either access key or SAS is needed")
 	}
 
 	var svcClient *service.Client
@@ -32,39 +62,33 @@ func getServiceClient(account string) (*service.Client, error) {
 		cred, err := service.NewSharedKeyCredential(account, key)
 		if err != nil {
 			log.Printf("Unable to create shared key [%v]", err.Error())
-			return nil, err
+			return err
 		}
 
 		svcClient, err = service.NewClientWithSharedKeyCredential(svcURL, cred, nil)
 		if err != nil {
 			log.Printf("Unable to create service client [%v]", err.Error())
-			return nil, err
+			return err
 		}
 	} else {
 		svcURL = svcURL + "?" + sas
 		svcClient, err = service.NewClientWithNoCredential(svcURL, nil)
 		if err != nil {
 			log.Printf("Unable to create service client [%v]", err.Error())
-			return nil, err
+			return err
 		}
 	}
-
-	return svcClient, nil
+	c.svcClient = svcClient
+	return nil
 }
 
-func GetContainerClient() (*container.Client, error) {
-	account := strings.TrimSpace(os.Getenv("AZURE_STORAGE_ACCOUNT_NAME"))
+func (c *Clients) createContainerClient() error {
 	container := strings.TrimSpace(os.Getenv("AZURE_STORAGE_ACCOUNT_CONTAINER"))
-
-	if account == "" || container == "" {
-		log.Println("Storage account name or container not provided")
-		return nil, fmt.Errorf("Storage account name or container not provided")
+	if container == "" {
+		log.Println("Storage container not provided")
+		return fmt.Errorf("Storage container not provided")
 	}
+	c.cntClient = c.svcClient.NewContainerClient(container)
 
-	svcClient, err := getServiceClient(account)
-	if err != nil {
-		return nil, err
-	}
-
-	return svcClient.NewContainerClient(container), err
+	return nil
 }

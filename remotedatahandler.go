@@ -1,14 +1,20 @@
 package main
 
 import (
+	"dokisuru/storage"
 	"fmt"
 	"io"
 	"log"
 	"os"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 )
+
+var _ JobHandler = &RemoteDataHandler{}
 
 type RemoteDataHandler struct {
 	BaseHandler
+	Container *container.Client
 }
 
 func NewRemoteDataHandler(workerCount int, next JobHandler) *RemoteDataHandler {
@@ -60,40 +66,15 @@ func (rdh *RemoteDataHandler) Process(workerId int, bj *Job) error {
 	return nil
 }
 
-func (rdh *RemoteDataHandler) Start() {
-	info, err := os.Lstat(config.Path)
+func (rdh *RemoteDataHandler) Start() error {
+	var err error
+	clients, err := storage.NewClients()
 	if err != nil {
-		log.Println("Error getting file info for", config.Path, ":", err)
-		return
+		log.Println("Error creating clients:", err)
+		return err
 	}
 
-	if info.IsDir() {
-		log.Println("Error: Path is a directory")
-		return
-	}
+	rdh.Container = clients.GetContainerClient()
 
-	// Get the file size
-	fileSize := info.Size()
-
-	// Calculate the number of blocks
-	blockCount := uint32(fileSize / int64(config.BlockSize))
-	if fileSize%int64(config.BlockSize) != 0 {
-		blockCount++
-	}
-
-	if blockCount > 50000 {
-		log.Println("Error: File too big")
-		return
-	}
-
-	// Create a job for each block
-	for i := uint32(0); i < blockCount; i++ {
-		offset := int64(i) * int64(config.BlockSize)
-		job := Job{
-			Path:   config.Path,
-			Offset: offset,
-		}
-
-		rdh.Worker.AddJob(&job)
-	}
+	return nil
 }

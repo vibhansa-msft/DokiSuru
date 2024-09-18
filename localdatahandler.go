@@ -7,6 +7,8 @@ import (
 	"os"
 )
 
+var _ JobHandler = &LocalDataHandler{}
+
 type LocalDataHandler struct {
 	BaseHandler
 }
@@ -60,16 +62,16 @@ func (ldh *LocalDataHandler) Process(workerId int, bj *Job) error {
 	return nil
 }
 
-func (ldh *LocalDataHandler) Start() {
+func (ldh *LocalDataHandler) Start() error {
 	info, err := os.Lstat(config.Path)
 	if err != nil {
 		log.Println("Error getting file info for", config.Path, ":", err)
-		return
+		return err
 	}
 
 	if info.IsDir() {
 		log.Println("Error: Path is a directory")
-		return
+		return fmt.Errorf("path is a directory")
 	}
 
 	// Get the file size
@@ -83,7 +85,7 @@ func (ldh *LocalDataHandler) Start() {
 
 	if blockCount > 50000 {
 		log.Println("Error: File too big")
-		return
+		return fmt.Errorf("file too big")
 	}
 
 	// Create a job for each block
@@ -96,4 +98,5 @@ func (ldh *LocalDataHandler) Start() {
 
 		ldh.Worker.AddJob(&job)
 	}
+	return nil
 }

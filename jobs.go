@@ -13,7 +13,7 @@ type Job struct {
 // JobHandler interface which needs to be implemented by the job
 type JobHandler interface {
 	Process(workerId int, job *Job) error
-	Start(schedule func(job *Job))
+	Start() error
 	GetNext() JobHandler
 	SetNext(JobHandler)
 }
@@ -27,7 +27,8 @@ func (bh *BaseHandler) Process(workerId int, job *Job) error {
 	return nil
 }
 
-func (bh *BaseHandler) Start(schedule func(job *Job)) {
+func (bh *BaseHandler) Start() error {
+	return nil
 }
 
 func (bh *BaseHandler) GetNext() JobHandler {
