@@ -2,19 +2,24 @@ package main
 
 import (
 	"dokisuru/storage"
-	"fmt"
-	"io"
 	"log"
-	"os"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 )
 
 var _ JobHandler = &RemoteDataHandler{}
 
+type BlobDetails struct {
+	Client   *blockblob.Client
+	Name     string
+	Blocks   []storage.StgBlock
+	Modified bool
+}
+
 type RemoteDataHandler struct {
 	BaseHandler
-	Container *container.Client
+	Blob   BlobDetails
+	Client *storage.Clients
 }
 
 func NewRemoteDataHandler(workerCount int, next JobHandler) *RemoteDataHandler {
@@ -23,58 +28,77 @@ func NewRemoteDataHandler(workerCount int, next JobHandler) *RemoteDataHandler {
 			Next: next},
 	}
 	rdh.Worker = NewWorkerPool(workerCount, rdh.Process)
+	rdh.Worker.Start()
 	return rdh
-}
-
-// Process the block
-func (rdh *RemoteDataHandler) Process(workerId int, bj *Job) error {
-	// Open the file
-	file, err := os.Open(bj.Path)
-	if err != nil {
-		log.Println("Worker", workerId, "error opening file", bj.Path, ":", err)
-		return fmt.Errorf("error opening file %s: %v", bj.Path, err)
-	}
-
-	defer file.Close()
-
-	// Create the block index
-	bj.BlockIndex = uint16(bj.Offset / int64(config.BlockSize))
-
-	// Read the data from given offset
-	bj.Data = make([]byte, config.BlockSize)
-	n, err := file.ReadAt(bj.Data, bj.Offset)
-	if err != nil {
-		if err != io.EOF {
-			log.Println("Worker", workerId, "error reading file", bj.Path, ":", err)
-			return fmt.Errorf("error reading file %s: %v", bj.Path, err)
-		}
-	}
-	if n <= 0 {
-		log.Println("Worker", workerId, "nothing to process from file", bj.Path, ":", err)
-		return fmt.Errorf("nothing to process from file %s: %v", bj.Path, err)
-	}
-
-	// Compuate md5sum of the data
-	bj.Md5Sum = ComputeMd5Sum(bj.Data[:n])
-
-	// Convert this slice to a base64 encoded string
-	bj.BlockId = GetBlockID(bj.BlockIndex, bj.Md5Sum)
-
-	log.Println("Worker", workerId, "processed block", bj.BlockIndex, "with blockId", bj.BlockId)
-	log.Printf("%x\n", bj.Md5Sum)
-
-	return nil
 }
 
 func (rdh *RemoteDataHandler) Start() error {
 	var err error
-	clients, err := storage.NewClients()
+	rdh.Client, err = storage.NewClients()
 	if err != nil {
 		log.Println("Error creating clients:", err)
 		return err
 	}
 
-	rdh.Container = clients.GetContainerClient()
+	rdh.Blob = BlobDetails{
+		Client:   rdh.Client.CreateBlobClient(config.Path),
+		Name:     config.Path,
+		Modified: false,
+	}
 
+	rdh.Blob.Blocks, err = rdh.Client.GetBlockList(rdh.Blob.Client)
+	if err != nil {
+		log.Println("Error getting block list")
+		return err
+	}
+
+	if len(rdh.Blob.Blocks) == 0 {
+		rdh.Blob.Blocks = make([]storage.StgBlock, 50000)
+	}
+
+	return nil
+}
+
+func (rdh *RemoteDataHandler) Stop() error {
+	rdh.Worker.Stop()
+
+	if rdh.Blob.Modified {
+		list := make([]string, 0)
+		for _, block := range rdh.Blob.Blocks {
+			if block.Name == "" {
+				break
+			}
+			list = append(list, block.Name)
+		}
+
+		err := rdh.Client.PutBlockList(rdh.Blob.Client, list)
+		if err != nil {
+			log.Println("Error committing block list")
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Process the block
+func (rdh *RemoteDataHandler) Process(workerId int, bj *Job) error {
+	if int(bj.BlockIndex) < len(rdh.Blob.Blocks) {
+		if rdh.Blob.Blocks[bj.BlockIndex].Name == bj.BlockId {
+			return nil
+		}
+	}
+
+	err := rdh.Client.StageBlock(rdh.Blob.Client, bj.Data, bj.BlockId)
+	if err != nil {
+		log.Println("Worker", workerId, "error staging block", bj.BlockIndex, ":", err)
+		return err
+	}
+
+	log.Println("Worker", workerId, "processed block", bj.BlockIndex, "with blockId", bj.BlockId)
+	log.Printf("%x\n", bj.Md5Sum)
+
+	rdh.Blob.Blocks[bj.BlockIndex].Name = bj.BlockId
+	rdh.Blob.Modified = true
 	return nil
 }

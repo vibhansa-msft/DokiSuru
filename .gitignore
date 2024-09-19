@@ -27,3 +27,4 @@ go.work.sum
 dokisuru
 *.log
 testdata*
+.vscode

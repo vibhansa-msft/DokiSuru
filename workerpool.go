@@ -19,11 +19,17 @@ func NewWorkerPool(workerCount int, callback func(int, *Job) error) *WorkerPool 
 	return &WorkerPool{
 		WorkerCount: workerCount,
 		JobQueue:    make(chan *Job, workerCount),
+		Callback:    callback,
 	}
 }
 
 // Start the worker pool
 func (wp *WorkerPool) Start() {
+	if wp.Callback == nil {
+		log.Println("error: no callback function")
+		return
+	}
+
 	for i := 0; i < wp.WorkerCount; i++ {
 		wp.WaitGroup.Add(1)
 		go wp.worker(i)
@@ -33,10 +39,6 @@ func (wp *WorkerPool) Start() {
 // Stop the worker pool
 func (wp *WorkerPool) Stop() {
 	close(wp.JobQueue)
-}
-
-// Wait for the worker pool to finish
-func (wp *WorkerPool) Wait() {
 	wp.WaitGroup.Wait()
 }
 
@@ -54,9 +56,5 @@ func (wp *WorkerPool) worker(workerId int) {
 		if err != nil {
 			log.Println("Worker", workerId, "error processing job", job.BlockIndex, ":", err)
 		}
-
-		// if wp.Handler.GetNext() != nil {
-
-		// }
 	}
 }

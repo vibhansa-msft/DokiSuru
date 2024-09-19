@@ -12,8 +12,13 @@ type Job struct {
 
 // JobHandler interface which needs to be implemented by the job
 type JobHandler interface {
-	Process(workerId int, job *Job) error
 	Start() error
+	Stop() error
+
+	Process(workerId int, job *Job) error
+
+	Enqueue(job *Job)
+
 	GetNext() JobHandler
 	SetNext(JobHandler)
 }
@@ -31,10 +36,18 @@ func (bh *BaseHandler) Start() error {
 	return nil
 }
 
+func (bh *BaseHandler) Stop() error {
+	return nil
+}
+
 func (bh *BaseHandler) GetNext() JobHandler {
 	return bh.Next
 }
 
 func (bh *BaseHandler) SetNext(next JobHandler) {
 	bh.Next = next
+}
+
+func (bh *BaseHandler) Enqueue(job *Job) {
+	bh.Worker.AddJob(job)
 }

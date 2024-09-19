@@ -19,7 +19,52 @@ func NewLocalDataHandler(workerCount int, next JobHandler) *LocalDataHandler {
 			Next: next},
 	}
 	ldh.Worker = NewWorkerPool(workerCount, ldh.Process)
+	ldh.Worker.Start()
 	return ldh
+}
+
+func (ldh *LocalDataHandler) Start() error {
+	info, err := os.Lstat(config.Path)
+	if err != nil {
+		log.Println("Error getting file info for", config.Path, ":", err)
+		return err
+	}
+
+	if info.IsDir() {
+		log.Println("Error: Path is a directory")
+		return fmt.Errorf("path is a directory")
+	}
+
+	// Get the file size
+	fileSize := info.Size()
+
+	// Calculate the number of blocks
+	blockCount := uint32(fileSize / int64(config.BlockSize))
+	if fileSize%int64(config.BlockSize) != 0 {
+		blockCount++
+	}
+
+	if blockCount > 50000 {
+		log.Println("Error: File too big")
+		return fmt.Errorf("file too big")
+	}
+
+	// Create a job for each block
+	for i := uint32(0); i < blockCount; i++ {
+		offset := int64(i) * int64(config.BlockSize)
+		job := Job{
+			Path:   config.Path,
+			Offset: offset,
+		}
+
+		ldh.Worker.AddJob(&job)
+	}
+	return nil
+}
+
+func (ldh *LocalDataHandler) Stop() error {
+	ldh.Worker.Stop()
+	return nil
 }
 
 // Process the block
@@ -59,44 +104,6 @@ func (ldh *LocalDataHandler) Process(workerId int, bj *Job) error {
 	log.Println("Worker", workerId, "processed block", bj.BlockIndex, "with blockId", bj.BlockId)
 	log.Printf("%x\n", bj.Md5Sum)
 
-	return nil
-}
-
-func (ldh *LocalDataHandler) Start() error {
-	info, err := os.Lstat(config.Path)
-	if err != nil {
-		log.Println("Error getting file info for", config.Path, ":", err)
-		return err
-	}
-
-	if info.IsDir() {
-		log.Println("Error: Path is a directory")
-		return fmt.Errorf("path is a directory")
-	}
-
-	// Get the file size
-	fileSize := info.Size()
-
-	// Calculate the number of blocks
-	blockCount := uint32(fileSize / int64(config.BlockSize))
-	if fileSize%int64(config.BlockSize) != 0 {
-		blockCount++
-	}
-
-	if blockCount > 50000 {
-		log.Println("Error: File too big")
-		return fmt.Errorf("file too big")
-	}
-
-	// Create a job for each block
-	for i := uint32(0); i < blockCount; i++ {
-		offset := int64(i) * int64(config.BlockSize)
-		job := Job{
-			Path:   config.Path,
-			Offset: offset,
-		}
-
-		ldh.Worker.AddJob(&job)
-	}
+	ldh.Next.Enqueue(bj)
 	return nil
 }
