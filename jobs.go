@@ -2,6 +2,7 @@ package main
 
 // Job is a job which processes a block
 type Job struct {
+	Path       string
 	BlockIndex uint16
 	NoOfBlocks uint16
 	BlockId    string
@@ -11,7 +12,7 @@ type Job struct {
 
 // JobHandler interface which needs to be implemented by the job
 type JobHandler interface {
-	Start() error
+	Start(path string) error
 	Stop() error
 
 	Process(workerId int, job *Job) error
@@ -25,13 +26,14 @@ type JobHandler interface {
 type BaseHandler struct {
 	Next   JobHandler
 	Worker *WorkerPool
+	Path   string
 }
 
 func (bh *BaseHandler) Process(workerId int, job *Job) error {
 	return nil
 }
 
-func (bh *BaseHandler) Start() error {
+func (bh *BaseHandler) Start(path string) error {
 	return nil
 }
 

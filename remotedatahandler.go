@@ -35,7 +35,9 @@ func NewRemoteDataHandler(workerCount int, next JobHandler) *RemoteDataHandler {
 	return rdh
 }
 
-func (rdh *RemoteDataHandler) Start() error {
+func (rdh *RemoteDataHandler) Start(path string) error {
+	rdh.Path = path
+
 	var err error
 	rdh.Client, err = storage.NewClients()
 	if err != nil {
@@ -44,8 +46,8 @@ func (rdh *RemoteDataHandler) Start() error {
 	}
 
 	rdh.Blob = BlobDetails{
-		Client:   rdh.Client.CreateBlobClient(config.Path),
-		Name:     config.Path,
+		Client:   rdh.Client.CreateBlobClient(rdh.Path),
+		Name:     rdh.Path,
 		Modified: false,
 	}
 
@@ -62,6 +64,7 @@ func (rdh *RemoteDataHandler) Stop() error {
 	rdh.Worker.Stop()
 
 	if rdh.Blob.Modified {
+		// log.Println("Updating", rdh.Path)
 		list := make([]string, 0)
 		for _, block := range rdh.Blob.Blocks {
 			if block.Name == "" {
@@ -78,12 +81,10 @@ func (rdh *RemoteDataHandler) Stop() error {
 			log.Println("Error committing block list")
 			return err
 		}
-	} else {
-		log.Println("No changes to commit")
-	}
 
-	if config.Validate {
-		rdh.validate()
+		if config.Validate {
+			rdh.validate()
+		}
 	}
 
 	return nil
@@ -112,8 +113,8 @@ func (rdh *RemoteDataHandler) Process(workerId int, bj *Job) error {
 		return err
 	}
 
-	log.Println("Worker", workerId, "processed block", bj.BlockIndex, "with blockId", bj.BlockId)
-	log.Printf("%x\n", bj.Md5Sum)
+	// log.Println("Worker", workerId, "processed block", bj.BlockIndex, "with blockId", bj.BlockId)
+	// log.Printf("%x\n", bj.Md5Sum)
 
 	rdh.Blob.Blocks[bj.BlockIndex].Name = bj.BlockId
 	rdh.Blob.Modified = true
@@ -122,24 +123,23 @@ func (rdh *RemoteDataHandler) Process(workerId int, bj *Job) error {
 
 // Process the block
 func (rdh *RemoteDataHandler) validate() {
-	log.Println("Validating blob")
-	err := rdh.Client.DownloadBlob(rdh.Blob.Client, "_validate_blob.bin")
+	// log.Println("Validating blob", rdh.Path)
+	tempFileName := rdh.Path + "_validate.bin"
+
+	err := rdh.Client.DownloadBlob(rdh.Blob.Client, tempFileName)
 	if err != nil {
 		log.Println("Error downloading blob:", err)
 		return
 	}
-	log.Println("Download complete")
 
-	remote_md5 := utils.GetMd5File("_validate_blob.bin")
-	local_md5 := utils.GetMd5File(config.Path)
+	remote_md5 := utils.GetMd5File(tempFileName)
+	local_md5 := utils.GetMd5File(rdh.Path)
 
-	log.Println("Remote MD5:", remote_md5, "Local MD5:", local_md5)
+	log.Println(tempFileName, ": Remote MD5:", remote_md5, rdh.Path, ": Local MD5:", local_md5)
 
 	if remote_md5 != local_md5 {
-		log.Println("Blob mismatch")
-	} else {
-		log.Println("Blob validated successfully")
+		log.Println("Blob mismatch", rdh.Path)
 	}
 
-	os.Remove("_validate_blob.bin")
+	os.Remove(tempFileName)
 }

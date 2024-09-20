@@ -109,7 +109,7 @@ func (c *Clients) CreateBlobClient(name string) *blockblob.Client {
 }
 
 func (c *Clients) GetBlockList(bbc *blockblob.Client) ([]StgBlock, error) {
-	blocks := make([]StgBlock, 50000)
+	blocks := make([]StgBlock, 0, 50000)
 	prop, err := bbc.GetProperties(context.Background(), nil)
 	if err != nil {
 		return blocks, nil
@@ -127,8 +127,8 @@ func (c *Clients) GetBlockList(bbc *blockblob.Client) ([]StgBlock, error) {
 	}
 
 	var block_ids []string
-	for idx, block := range resp.CommittedBlocks {
-		blocks[idx] = StgBlock{Name: *block.Name, Size: *block.Size}
+	for _, block := range resp.CommittedBlocks {
+		blocks = append(blocks, StgBlock{Name: *block.Name, Size: *block.Size})
 		block_ids = append(block_ids, *block.Name)
 	}
 

@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	_ "net/http/pprof"
 	"os"
@@ -27,28 +26,9 @@ func main() {
 	// Parse the user config
 	flag.Parse()
 
-	// Create a remote data handler
-	RemoteDataHandler := NewRemoteDataHandler(config.WorkerCount, nil)
-
-	// Create a local data handler
-	localDataHandler := NewLocalDataHandler(config.WorkerCount, RemoteDataHandler)
-
-	// Start the worker pool
-	err = RemoteDataHandler.Start()
-	if err != nil {
-		fmt.Println("Error starting remote data handler: %v", err)
-		return
-	}
-
-	err = localDataHandler.Start()
-	if err != nil {
-		fmt.Println("Error starting local data handler: %v", err)
-		return
-	}
-
-	// Start the worker pool
-	localDataHandler.Stop()
-	RemoteDataHandler.Stop()
+	iterator := NewIterator(config.WorkerCount)
+	iterator.Start(config.Path)
+	iterator.Stop()
 
 	log.Printf("DōkiSuru: Finishing")
 }

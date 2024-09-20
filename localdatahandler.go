@@ -24,10 +24,11 @@ func NewLocalDataHandler(workerCount int, next JobHandler) *LocalDataHandler {
 	return ldh
 }
 
-func (ldh *LocalDataHandler) Start() error {
-	info, err := os.Lstat(config.Path)
+func (ldh *LocalDataHandler) Start(path string) error {
+	ldh.Path = path
+	info, err := os.Lstat(ldh.Path)
 	if err != nil {
-		log.Println("Error getting file info for", config.Path, ":", err)
+		log.Println("Error getting file info for", ldh.Path, ":", err)
 		return err
 	}
 
@@ -77,10 +78,10 @@ func (ldh *LocalDataHandler) Stop() error {
 // Process the block
 func (ldh *LocalDataHandler) Process(workerId int, bj *Job) error {
 	// Open the file
-	file, err := os.Open(config.Path)
+	file, err := os.Open(ldh.Path)
 	if err != nil {
-		log.Println("Worker", workerId, "error opening file", config.Path, ":", err)
-		return fmt.Errorf("error opening file %s: %v", config.Path, err)
+		log.Println("Worker", workerId, "error opening file", ldh.Path, ":", err)
+		return fmt.Errorf("error opening file %s: %v", ldh.Path, err)
 	}
 
 	defer file.Close()
@@ -90,14 +91,14 @@ func (ldh *LocalDataHandler) Process(workerId int, bj *Job) error {
 	n, err := file.ReadAt(bj.Data, int64(bj.BlockIndex)*int64(config.BlockSize))
 	if err != nil {
 		if err != io.EOF {
-			log.Println("Worker", workerId, "error reading file", config.Path, ":", err)
-			return fmt.Errorf("error reading file %s: %v", config.Path, err)
+			log.Println("Worker", workerId, "error reading file", ldh.Path, ":", err)
+			return fmt.Errorf("error reading file %s: %v", ldh.Path, err)
 		}
 	}
 
 	if int(bj.BlockIndex) < (int(bj.NoOfBlocks)-1) && n < int(config.BlockSize) {
-		log.Println("Worker", workerId, "nothing to process from file", config.Path, ":", err)
-		return fmt.Errorf("nothing to process from file %s: %v", config.Path, err)
+		log.Println("Worker", workerId, "nothing to process from file", ldh.Path, ":", err)
+		return fmt.Errorf("nothing to process from file %s: %v", ldh.Path, err)
 	}
 
 	// Compuate md5sum of the data
@@ -109,8 +110,8 @@ func (ldh *LocalDataHandler) Process(workerId int, bj *Job) error {
 	// Convert this slice to a base64 encoded string
 	bj.BlockId = utils.GetBlockID(bj.BlockIndex, bj.Md5Sum)
 
-	log.Println("Worker", workerId, "processed block", bj.BlockIndex, "with blockId", bj.BlockId)
-	log.Printf("%x\n", bj.Md5Sum)
+	// log.Println("Worker", workerId, "processed block", bj.BlockIndex, "with blockId", bj.BlockId)
+	// log.Printf("%x\n", bj.Md5Sum)
 
 	ldh.Next.Enqueue(bj)
 	return nil
