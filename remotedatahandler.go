@@ -2,7 +2,10 @@ package main
 
 import (
 	"dokisuru/storage"
+	"dokisuru/utils"
 	"log"
+	"os"
+	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 )
@@ -52,10 +55,6 @@ func (rdh *RemoteDataHandler) Start() error {
 		return err
 	}
 
-	if len(rdh.Blob.Blocks) == 0 {
-		rdh.Blob.Blocks = make([]storage.StgBlock, 50000)
-	}
-
 	return nil
 }
 
@@ -71,11 +70,20 @@ func (rdh *RemoteDataHandler) Stop() error {
 			list = append(list, block.Name)
 		}
 
-		err := rdh.Client.PutBlockList(rdh.Blob.Client, list)
+		id_str := strings.Join(list, ",")
+		id_hash := utils.ComputeMd5Sum([]byte(id_str))
+
+		err := rdh.Client.PutBlockList(rdh.Blob.Client, list, id_hash)
 		if err != nil {
 			log.Println("Error committing block list")
 			return err
 		}
+	} else {
+		log.Println("No changes to commit")
+	}
+
+	if config.Validate {
+		rdh.validate()
 	}
 
 	return nil
@@ -83,6 +91,15 @@ func (rdh *RemoteDataHandler) Stop() error {
 
 // Process the block
 func (rdh *RemoteDataHandler) Process(workerId int, bj *Job) error {
+	if bj.BlockIndex == 0 && len(rdh.Blob.Blocks) != int(bj.NoOfBlocks) {
+		rdh.Blob.Modified = true
+		rdh.Blob.Blocks = rdh.Blob.Blocks[:bj.NoOfBlocks]
+	}
+
+	if bj.BlockId == "" {
+		return nil
+	}
+
 	if int(bj.BlockIndex) < len(rdh.Blob.Blocks) {
 		if rdh.Blob.Blocks[bj.BlockIndex].Name == bj.BlockId {
 			return nil
@@ -101,4 +118,28 @@ func (rdh *RemoteDataHandler) Process(workerId int, bj *Job) error {
 	rdh.Blob.Blocks[bj.BlockIndex].Name = bj.BlockId
 	rdh.Blob.Modified = true
 	return nil
+}
+
+// Process the block
+func (rdh *RemoteDataHandler) validate() {
+	log.Println("Validating blob")
+	err := rdh.Client.DownloadBlob(rdh.Blob.Client, "_validate_blob.bin")
+	if err != nil {
+		log.Println("Error downloading blob:", err)
+		return
+	}
+	log.Println("Download complete")
+
+	remote_md5 := utils.GetMd5File("_validate_blob.bin")
+	local_md5 := utils.GetMd5File(config.Path)
+
+	log.Println("Remote MD5:", remote_md5, "Local MD5:", local_md5)
+
+	if remote_md5 != local_md5 {
+		log.Println("Blob mismatch")
+	} else {
+		log.Println("Blob validated successfully")
+	}
+
+	os.Remove("_validate_blob.bin")
 }

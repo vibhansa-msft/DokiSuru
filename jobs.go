@@ -2,9 +2,8 @@ package main
 
 // Job is a job which processes a block
 type Job struct {
-	Path       string
-	Offset     int64
 	BlockIndex uint16
+	NoOfBlocks uint16
 	BlockId    string
 	Data       []byte
 	Md5Sum     []byte

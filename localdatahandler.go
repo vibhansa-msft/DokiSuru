@@ -1,6 +1,7 @@
 package main
 
 import (
+	"dokisuru/utils"
 	"fmt"
 	"io"
 	"log"
@@ -39,7 +40,7 @@ func (ldh *LocalDataHandler) Start() error {
 	fileSize := info.Size()
 
 	// Calculate the number of blocks
-	blockCount := uint32(fileSize / int64(config.BlockSize))
+	blockCount := uint16(fileSize / int64(config.BlockSize))
 	if fileSize%int64(config.BlockSize) != 0 {
 		blockCount++
 	}
@@ -49,12 +50,18 @@ func (ldh *LocalDataHandler) Start() error {
 		return fmt.Errorf("file too big")
 	}
 
+	if blockCount == 0 {
+		ldh.Next.Enqueue(&Job{
+			BlockIndex: 0,
+			NoOfBlocks: 0,
+		})
+	}
+
 	// Create a job for each block
-	for i := uint32(0); i < blockCount; i++ {
-		offset := int64(i) * int64(config.BlockSize)
+	for i := uint16(0); i < blockCount; i++ {
 		job := Job{
-			Path:   config.Path,
-			Offset: offset,
+			BlockIndex: i,
+			NoOfBlocks: blockCount,
 		}
 
 		ldh.Worker.AddJob(&job)
@@ -70,36 +77,37 @@ func (ldh *LocalDataHandler) Stop() error {
 // Process the block
 func (ldh *LocalDataHandler) Process(workerId int, bj *Job) error {
 	// Open the file
-	file, err := os.Open(bj.Path)
+	file, err := os.Open(config.Path)
 	if err != nil {
-		log.Println("Worker", workerId, "error opening file", bj.Path, ":", err)
-		return fmt.Errorf("error opening file %s: %v", bj.Path, err)
+		log.Println("Worker", workerId, "error opening file", config.Path, ":", err)
+		return fmt.Errorf("error opening file %s: %v", config.Path, err)
 	}
 
 	defer file.Close()
 
-	// Create the block index
-	bj.BlockIndex = uint16(bj.Offset / int64(config.BlockSize))
-
 	// Read the data from given offset
 	bj.Data = make([]byte, config.BlockSize)
-	n, err := file.ReadAt(bj.Data, bj.Offset)
+	n, err := file.ReadAt(bj.Data, int64(bj.BlockIndex)*int64(config.BlockSize))
 	if err != nil {
 		if err != io.EOF {
-			log.Println("Worker", workerId, "error reading file", bj.Path, ":", err)
-			return fmt.Errorf("error reading file %s: %v", bj.Path, err)
+			log.Println("Worker", workerId, "error reading file", config.Path, ":", err)
+			return fmt.Errorf("error reading file %s: %v", config.Path, err)
 		}
 	}
-	if n <= 0 {
-		log.Println("Worker", workerId, "nothing to process from file", bj.Path, ":", err)
-		return fmt.Errorf("nothing to process from file %s: %v", bj.Path, err)
+
+	if int(bj.BlockIndex) < (int(bj.NoOfBlocks)-1) && n < int(config.BlockSize) {
+		log.Println("Worker", workerId, "nothing to process from file", config.Path, ":", err)
+		return fmt.Errorf("nothing to process from file %s: %v", config.Path, err)
 	}
 
 	// Compuate md5sum of the data
-	bj.Md5Sum = ComputeMd5Sum(bj.Data[:n])
+	if int(bj.BlockIndex) == (int(bj.NoOfBlocks) - 1) {
+		bj.Data = bj.Data[:n]
+	}
+	bj.Md5Sum = utils.ComputeMd5Sum(bj.Data)
 
 	// Convert this slice to a base64 encoded string
-	bj.BlockId = GetBlockID(bj.BlockIndex, bj.Md5Sum)
+	bj.BlockId = utils.GetBlockID(bj.BlockIndex, bj.Md5Sum)
 
 	log.Println("Worker", workerId, "processed block", bj.BlockIndex, "with blockId", bj.BlockId)
 	log.Printf("%x\n", bj.Md5Sum)

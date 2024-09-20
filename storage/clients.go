@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"dokisuru/utils"
 	"fmt"
 	"log"
 	"os"
@@ -108,14 +109,15 @@ func (c *Clients) CreateBlobClient(name string) *blockblob.Client {
 }
 
 func (c *Clients) GetBlockList(bbc *blockblob.Client) ([]StgBlock, error) {
+	blocks := make([]StgBlock, 50000)
 	prop, err := bbc.GetProperties(context.Background(), nil)
 	if err != nil {
-		return []StgBlock{}, nil
+		return blocks, nil
 	}
 
-	val, ok := prop.Metadata["Doki_etag"]
-	if !ok || (string)(*prop.ETag) == *val {
-		return nil, fmt.Errorf("ETag mismatch")
+	val, ok := prop.Metadata["Doki_tag"]
+	if !ok {
+		return blocks, nil
 	}
 
 	resp, err := bbc.GetBlockList(context.Background(), blockblob.BlockListTypeCommitted, nil)
@@ -124,9 +126,18 @@ func (c *Clients) GetBlockList(bbc *blockblob.Client) ([]StgBlock, error) {
 		return nil, err
 	}
 
-	var blocks []StgBlock
-	for _, block := range resp.CommittedBlocks {
-		blocks = append(blocks, StgBlock{Name: *block.Name, Size: *block.Size})
+	var block_ids []string
+	for idx, block := range resp.CommittedBlocks {
+		blocks[idx] = StgBlock{Name: *block.Name, Size: *block.Size}
+		block_ids = append(block_ids, *block.Name)
+	}
+
+	id_str := strings.Join(block_ids, ",")
+	id_hash := utils.ComputeMd5Sum([]byte(id_str))
+
+	if *val != fmt.Sprintf("%x", id_hash) {
+		log.Println("Doki tag mismatch, resync blob")
+		return []StgBlock{}, nil
 	}
 
 	return blocks, nil
@@ -147,20 +158,35 @@ func (c *Clients) GetBlock(bbc *blockblob.Client, offset int64, length int64) ([
 	return data, err
 }
 
-func (c *Clients) PutBlockList(bbc *blockblob.Client, list []string) error {
-	_, err := bbc.CommitBlockList(context.Background(), list, nil)
+func (c *Clients) PutBlockList(bbc *blockblob.Client, list []string, id_hash []byte) error {
+	resp, err := bbc.GetProperties(context.Background(), nil)
+
+	metadata := make(map[string]*string)
+	if err == nil && resp.Metadata != nil {
+		metadata = resp.Metadata
+	}
+	id_hash_str := fmt.Sprintf("%x", id_hash)
+	metadata["Doki_tag"] = &id_hash_str
+
+	_, err = bbc.CommitBlockList(context.Background(), list, &blockblob.CommitBlockListOptions{
+		Metadata: metadata,
+	})
+
 	if err != nil {
 		log.Println("Error committing block list:", err)
 		return err
 	}
 
-	resp, err := bbc.GetProperties(context.Background(), nil)
+	return err
+}
+
+func (c *Clients) DownloadBlob(bbc *blockblob.Client, name string) error {
+	of, err := os.Create(name)
 	if err != nil {
 		return err
 	}
+	defer of.Close()
 
-	resp.Metadata["Doki_etag"] = (*string)(resp.ETag)
-	_, err = bbc.SetMetadata(context.Background(), resp.Metadata, nil)
-
-	return err
+	_, _ = bbc.DownloadFile(context.Background(), of, nil)
+	return nil
 }
