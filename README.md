@@ -27,6 +27,6 @@ go build
 ```
 
 # Future Scope
-- DokiSuru can sync only files which are ogirinally uploaded or synced earlier using the same utility.
+- DokiSuru can sync only files which are originally uploaded or synced earlier using the same utility.
 - If DokiSuru figures that blob was modified outside the scope of this utility then it will fail to sync.
 - If the file does not exists in container then entire file will be uploaded.
